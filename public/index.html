@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gerador de QR Code</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">QR Studio</span>
+          <h1>Gerar e baixar QR Code</h1>
+        </div>
+        <div class="format-pills" aria-label="Formatos disponiveis">
+          <span>PNG</span>
+          <span>JPG</span>
+          <span>SVG</span>
+          <span>PDF</span>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <form id="generator-form" class="panel panel-form">
+          <div class="panel-heading">
+            <h2>Entrada</h2>
+            <button id="clear-button" type="button" class="ghost-button">Limpar</button>
+          </div>
+
+          <label class="field">
+            <span>Link ou texto</span>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M10.6 13.4a1 1 0 0 0 1.4 1.4l4.6-4.6a3 3 0 1 0-4.2-4.2l-2.1 2.1a1 1 0 1 0 1.4 1.4l2.1-2.1a1 1 0 1 1 1.4 1.4L10.6 13.4Zm2.8-2.8a1 1 0 0 0-1.4-1.4l-4.6 4.6a3 3 0 0 0 4.2 4.2l2.1-2.1a1 1 0 0 0-1.4-1.4l-2.1 2.1a1 1 0 1 1-1.4-1.4l4.6-4.6Z"
+                />
+              </svg>
+              <input
+                id="text-input"
+                name="text"
+                type="text"
+                placeholder="https://exemplo.com"
+                autocomplete="off"
+              />
+            </div>
+          </label>
+
+          <div class="settings-grid">
+            <label class="field">
+              <span>Tamanho</span>
+              <input id="size-input" type="range" min="200" max="640" step="20" value="360" />
+            </label>
+            <div class="size-readout">
+              <span>Atual</span>
+              <strong id="size-value">360 px</strong>
+            </div>
+          </div>
+
+          <p class="microcopy">Sem protocolo, o app adiciona <code>https://</code> automaticamente.</p>
+
+          <div class="actions-row">
+            <button class="primary-button" type="submit">Gerar</button>
+            <button id="copy-button" class="secondary-button" type="button" disabled>Copiar PNG</button>
+          </div>
+
+          <div class="download-grid">
+            <button class="download-button" type="button" data-format="png" disabled>PNG</button>
+            <button class="download-button" type="button" data-format="jpg" disabled>JPG</button>
+            <button class="download-button" type="button" data-format="svg" disabled>SVG</button>
+            <button class="download-button" type="button" data-format="pdf" disabled>PDF</button>
+          </div>
+        </form>
+
+        <section class="panel panel-preview">
+          <div class="panel-heading">
+            <h2>Preview</h2>
+            <span id="status-badge" class="status-badge">Aguardando</span>
+          </div>
+
+          <div id="preview-frame" class="preview-frame is-empty">
+            <div id="empty-state" class="empty-state">
+              <div class="empty-icon" aria-hidden="true"></div>
+              <p>Digite um link.</p>
+            </div>
+            <img id="preview-image" alt="Preview do QR Code gerado" hidden />
+          </div>
+
+          <dl class="meta-grid">
+            <div>
+              <dt>Conteudo</dt>
+              <dd id="normalized-output">Nenhum item gerado ainda.</dd>
+            </div>
+            <div>
+              <dt>Arquivo</dt>
+              <dd id="filename-output">qrcode</dd>
+            </div>
+          </dl>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+  </html>

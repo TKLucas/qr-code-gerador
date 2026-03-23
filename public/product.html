@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Produto</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="product-page">
+    <div class="product-page-waves" aria-hidden="true">
+      <span class="product-wave product-wave-back"></span>
+      <span class="product-wave product-wave-front"></span>
+    </div>
+    <main class="product-shell">
+      <section id="product-loading" class="state-card">Carregando produto...</section>
+
+      <section id="product-error" class="state-card" hidden>
+        <p>Nao foi possivel carregar este produto.</p>
+        <a href="/">Voltar ao painel</a>
+      </section>
+
+      <section id="product-card" class="product-page-card" hidden>
+        <div class="product-page-hero">
+          <div class="product-page-icons" aria-hidden="true">
+            <span>✦</span>
+            <span>🏆</span>
+            <span>✦</span>
+          </div>
+          <h1>Parabens!</h1>
+          <p id="product-page-subtitle">Voce ganhou um premio exclusivo.</p>
+        </div>
+
+        <div class="product-showcase-card">
+          <div class="product-page-image-shell">
+            <div class="product-page-image-glow"></div>
+            <img id="product-page-image" alt="Foto do produto" />
+          </div>
+        </div>
+
+        <div class="product-info-card">
+          <div class="product-info-copy">
+            <h2 id="product-page-title"></h2>
+            <p id="product-page-message"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/product.js" defer></script>
+  </body>
+</html>

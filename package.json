@@ -12,7 +12,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "jsdom": "^29.0.1",
+    "jsqr": "^1.4.0",
+    "mongoose": "^9.3.1",
     "pdfkit": "^0.17.2",
-    "qrcode": "^1.5.4"
+    "qr-code-styling": "^1.9.2",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.5"
   }
 }

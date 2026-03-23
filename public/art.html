@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arte do produto</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="art-page">
+    <main class="art-shell">
+      <section id="art-loading" class="state-card">Gerando arte...</section>
+
+      <section id="art-error" class="state-card" hidden>
+        <p>Nao foi possivel gerar esta arte.</p>
+        <a href="/">Voltar ao painel</a>
+      </section>
+
+      <section id="art-card" class="art-card" hidden>
+        <div class="art-preview-shell">
+          <canvas id="art-canvas" width="1080" height="1920" aria-label="Preview da arte final com QR Code"></canvas>
+        </div>
+
+        <div class="art-sidebar">
+          <span class="eyebrow">Arte para download</span>
+          <h1 id="art-title"></h1>
+          <p>O QR abaixo foi gerado usando o link final do produto. A arte ja aparece pronta para baixar em imagem.</p>
+
+          <dl class="meta-list compact">
+            <div>
+              <dt>Link final</dt>
+              <dd id="art-final-link"></dd>
+            </div>
+            <div>
+              <dt>Mensagem</dt>
+              <dd id="art-reward-message"></dd>
+            </div>
+          </dl>
+
+          <div class="art-actions">
+            <button id="download-art-button" class="primary-button" type="button">Baixar arte PNG</button>
+            <a id="download-transparent-qr-button" class="secondary-button button-link" href="#">Baixar QR transparente</a>
+            <button id="copy-final-link-button" class="secondary-button" type="button">Copiar link final</button>
+            <a id="open-final-link-button" class="secondary-button button-link" href="#" target="_blank" rel="noreferrer">Abrir link final</a>
+            <a id="back-home-button" class="secondary-button button-link" href="/">Voltar ao painel</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/artwork.js" defer></script>
+    <script src="/art.js" defer></script>
+  </body>
+</html>

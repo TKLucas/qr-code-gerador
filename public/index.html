@@ -3,103 +3,139 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gerador de QR Code</title>
+    <title>Painel de Produtos QR</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="page-shell">
-      <header class="topbar">
-        <div>
-          <span class="eyebrow">QR Studio</span>
-          <h1>Gerar e baixar QR Code</h1>
+  <body class="admin-body">
+    <main class="admin-shell">
+      <section class="hero-card">
+        <div class="hero-copy">
+          <span class="eyebrow">Fluxo do sistema</span>
+          <h1>Cadastro, geracao do link final e download da arte com QR.</h1>
+          <p>
+            Primeiro o produto e cadastrado com foto e mensagem do premio. Depois o sistema gera
+            o link final do produto e te leva para a tela da arte pronta para download.
+          </p>
         </div>
-        <div class="format-pills" aria-label="Formatos disponiveis">
-          <span>PNG</span>
-          <span>JPG</span>
-          <span>SVG</span>
-          <span>PDF</span>
+        <div class="hero-steps">
+          <span>1. Cadastro</span>
+          <span>2. Link final</span>
+          <span>3. Arte com QR</span>
+          <span>4. Consulta de links</span>
         </div>
-      </header>
+      </section>
 
-      <section class="workspace">
-        <form id="generator-form" class="panel panel-form">
-          <div class="panel-heading">
-            <h2>Entrada</h2>
-            <button id="clear-button" type="button" class="ghost-button">Limpar</button>
+      <section class="dashboard-grid">
+        <form id="product-form" class="panel form-panel">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Novo produto</span>
+              <h2>Cadastro</h2>
+            </div>
+            <button id="reset-form-button" type="button" class="ghost-button">Limpar</button>
           </div>
 
           <label class="field">
-            <span>Link ou texto</span>
-            <div class="input-shell">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M10.6 13.4a1 1 0 0 0 1.4 1.4l4.6-4.6a3 3 0 1 0-4.2-4.2l-2.1 2.1a1 1 0 1 0 1.4 1.4l2.1-2.1a1 1 0 1 1 1.4 1.4L10.6 13.4Zm2.8-2.8a1 1 0 0 0-1.4-1.4l-4.6 4.6a3 3 0 0 0 4.2 4.2l2.1-2.1a1 1 0 0 0-1.4-1.4l-2.1 2.1a1 1 0 1 1-1.4-1.4l4.6-4.6Z"
-                />
-              </svg>
-              <input
-                id="text-input"
-                name="text"
-                type="text"
-                placeholder="https://exemplo.com"
-                autocomplete="off"
-              />
+            <span>Nome do produto ou premio</span>
+            <input id="title-input" name="title" type="text" maxlength="90" placeholder="Smoothie Fresh Soul" required />
+          </label>
+
+          <label class="field">
+            <span>Mensagem do premio</span>
+            <input id="reward-message-input" name="rewardMessage" type="text" maxlength="280" placeholder="Parabens, voce ganhou um smoothie gratis." required />
+          </label>
+
+          <label class="field">
+            <span>Arte base</span>
+            <select id="art-template-select" name="artTemplateId" required>
+              <option value="">Carregando opcoes...</option>
+            </select>
+          </label>
+
+          <label class="field qr-color-field">
+            <span>Cor do QR Code</span>
+            <div class="color-input-shell">
+              <input id="qr-dark-color-input" name="qrDarkColor" type="color" value="#18181b" />
+              <code id="qr-dark-color-value">#18181b</code>
             </div>
           </label>
 
-          <div class="settings-grid">
-            <label class="field">
-              <span>Tamanho</span>
-              <input id="size-input" type="range" min="200" max="640" step="20" value="360" />
-            </label>
-            <div class="size-readout">
-              <span>Atual</span>
-              <strong id="size-value">360 px</strong>
-            </div>
-          </div>
+          <label class="upload-field">
+            <span>Foto do produto ou premio</span>
+            <input id="product-image-input" name="productImage" type="file" accept="image/*" required />
+            <small>Obrigatoria. Ela fica salva no cadastro e aparece na pagina final do produto.</small>
+          </label>
 
-          <p class="microcopy">Sem protocolo, o app adiciona <code>https://</code> automaticamente.</p>
-
-          <div class="actions-row">
-            <button class="primary-button" type="submit">Gerar</button>
-            <button id="copy-button" class="secondary-button" type="button" disabled>Copiar PNG</button>
-          </div>
-
-          <div class="download-grid">
-            <button class="download-button" type="button" data-format="png" disabled>PNG</button>
-            <button class="download-button" type="button" data-format="jpg" disabled>JPG</button>
-            <button class="download-button" type="button" data-format="svg" disabled>SVG</button>
-            <button class="download-button" type="button" data-format="pdf" disabled>PDF</button>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Salvar e gerar link</button>
+            <p id="form-status" class="helper-text">Ao salvar, voce sera levado direto para a tela da arte e podera baixar o QR transparente.</p>
           </div>
         </form>
 
-        <section class="panel panel-preview">
-          <div class="panel-heading">
-            <h2>Preview</h2>
-            <span id="status-badge" class="status-badge">Aguardando</span>
+        <section class="panel preview-panel">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Preview do cadastro</span>
+              <h2>Produto salvo no sistema</h2>
+            </div>
+            <span id="draft-badge" class="status-badge">Rascunho</span>
           </div>
 
-          <div id="preview-frame" class="preview-frame is-empty">
-            <div id="empty-state" class="empty-state">
-              <div class="empty-icon" aria-hidden="true"></div>
-              <p>Digite um link.</p>
+          <div class="product-preview">
+            <div class="product-preview-image-shell">
+              <img id="product-preview-image" alt="Preview do produto" hidden />
+              <div id="product-preview-empty" class="empty-art">Envie a foto do produto</div>
             </div>
-            <img id="preview-image" alt="Preview do QR Code gerado" hidden />
-          </div>
 
-          <dl class="meta-grid">
-            <div>
-              <dt>Conteudo</dt>
-              <dd id="normalized-output">Nenhum item gerado ainda.</dd>
+            <div class="product-preview-copy">
+              <span class="preview-label">Link final sera gerado depois do cadastro</span>
+              <h3 id="product-preview-title">Seu produto aparece aqui</h3>
+              <dl class="meta-list">
+                <div>
+                  <dt>Mensagem</dt>
+                  <dd id="product-preview-message">Parabens, voce ganhou um smoothie gratis.</dd>
+                </div>
+                <div>
+                  <dt>Arte base</dt>
+                  <dd id="product-preview-template">Prancheta 1</dd>
+                </div>
+                <div>
+                  <dt>Cor do QR</dt>
+                  <dd class="qr-color-meta">
+                    <span id="product-preview-qr-color-swatch" class="qr-color-swatch" style="--qr-color: #18181b"></span>
+                    <span id="product-preview-qr-color">#18181b</span>
+                  </dd>
+                </div>
+              </dl>
             </div>
-            <div>
-              <dt>Arquivo</dt>
-              <dd id="filename-output">qrcode</dd>
-            </div>
-          </dl>
+          </div>
         </section>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Links gerados</span>
+            <h2>Produtos cadastrados</h2>
+          </div>
+          <span id="list-count" class="status-badge">0 itens</span>
+        </div>
+
+        <div class="list-toolbar">
+          <label class="field">
+            <span>Buscar na listagem</span>
+            <input id="product-search-input" type="search" placeholder="Busque por nome, mensagem ou link" />
+          </label>
+          <p class="helper-text">A lista abaixo mostra os itens mais recentes primeiro.</p>
+        </div>
+
+        <div id="product-list" class="product-list"></div>
+        <div id="empty-list" class="empty-list" hidden>
+          Nenhum produto cadastrado ainda.
+        </div>
       </section>
     </main>
 
     <script src="/app.js" defer></script>
   </body>
-  </html>
+</html>

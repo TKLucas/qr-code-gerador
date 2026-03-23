@@ -3,7 +3,7 @@
     return new Promise((resolve, reject) => {
       const image = new Image();
       image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error('Nao foi possivel carregar a imagem da arte.'));
+      image.onerror = () => reject(new Error('Não foi possível carregar a imagem da arte.'));
       image.src = src;
     });
   }

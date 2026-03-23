@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Produtos cadastrados</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <main class="admin-shell">
+      <section class="hero-card">
+        <div class="hero-copy">
+          <span class="eyebrow">Consulta</span>
+          <h1>Produtos cadastrados</h1>
+          <p>Busque, abra o link final, baixe o QR transparente e envie um item para edição.</p>
+          <div class="hero-actions">
+            <a class="secondary-button button-link" href="/">Novo cadastro</a>
+          </div>
+        </div>
+        <div class="hero-steps">
+          <span>Busca</span>
+          <span>Edição</span>
+          <span>QR transparente</span>
+          <span>Link final</span>
+        </div>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Links gerados</span>
+            <h2>Produtos cadastrados</h2>
+          </div>
+          <span id="list-count" class="status-badge">0 itens</span>
+        </div>
+
+        <div class="list-toolbar">
+          <label class="field">
+            <span>Buscar na listagem</span>
+            <input id="product-search-input" type="search" placeholder="Busque por nome, mensagem ou link" />
+          </label>
+          <p id="list-status" class="helper-text">A lista abaixo mostra os itens mais recentes primeiro.</p>
+        </div>
+
+        <div id="product-list" class="product-list"></div>
+        <div id="empty-list" class="empty-list" hidden>
+          Nenhum produto cadastrado ainda.
+        </div>
+      </section>
+    </main>
+
+    <script src="/products.js" defer></script>
+  </body>
+</html>

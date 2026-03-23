@@ -11,11 +11,14 @@
       <section class="hero-card">
         <div class="hero-copy">
           <span class="eyebrow">Fluxo do sistema</span>
-          <h1>Cadastro, geracao do link final e download da arte com QR.</h1>
+          <h1>Cadastro, geração do link final e download da arte com QR.</h1>
           <p>
-            Primeiro o produto e cadastrado com foto e mensagem do premio. Depois o sistema gera
+            Primeiro o produto é cadastrado com foto e mensagem do prêmio. Depois o sistema gera
             o link final do produto e te leva para a tela da arte pronta para download.
           </p>
+          <div class="hero-actions">
+            <a class="secondary-button button-link" href="/produtos">Ver produtos cadastrados</a>
+          </div>
         </div>
         <div class="hero-steps">
           <span>1. Cadastro</span>
@@ -36,13 +39,13 @@
           </div>
 
           <label class="field">
-            <span>Nome do produto ou premio</span>
+            <span>Nome do produto ou prêmio</span>
             <input id="title-input" name="title" type="text" maxlength="90" placeholder="Smoothie Fresh Soul" required />
           </label>
 
           <label class="field">
-            <span>Mensagem do premio</span>
-            <input id="reward-message-input" name="rewardMessage" type="text" maxlength="280" placeholder="Parabens, voce ganhou um smoothie gratis." required />
+            <span>Mensagem do prêmio</span>
+            <textarea id="reward-message-input" name="rewardMessage" maxlength="600" rows="4" placeholder="Parabéns, você ganhou um smoothie grátis." required></textarea>
           </label>
 
           <label class="field">
@@ -61,21 +64,21 @@
           </label>
 
           <label class="upload-field">
-            <span>Foto do produto ou premio</span>
+            <span>Foto do produto ou prêmio</span>
             <input id="product-image-input" name="productImage" type="file" accept="image/*" required />
-            <small>Obrigatoria. Ela fica salva no cadastro e aparece na pagina final do produto.</small>
+            <small>Obrigatória. Ela fica salva no cadastro e aparece na página final do produto.</small>
           </label>
 
           <div class="form-actions">
-            <button class="primary-button" type="submit">Salvar e gerar link</button>
-            <p id="form-status" class="helper-text">Ao salvar, voce sera levado direto para a tela da arte e podera baixar o QR transparente.</p>
+            <button id="submit-form-button" class="primary-button" type="submit">Salvar e gerar link</button>
+            <p id="form-status" class="helper-text">Ao salvar, você será levado direto para a tela da arte e poderá baixar o QR transparente.</p>
           </div>
         </form>
 
         <section class="panel preview-panel">
           <div class="section-heading">
             <div>
-              <span class="eyebrow">Preview do cadastro</span>
+              <span class="eyebrow">Prévia do cadastro</span>
               <h2>Produto salvo no sistema</h2>
             </div>
             <span id="draft-badge" class="status-badge">Rascunho</span>
@@ -83,17 +86,17 @@
 
           <div class="product-preview">
             <div class="product-preview-image-shell">
-              <img id="product-preview-image" alt="Preview do produto" hidden />
+              <img id="product-preview-image" alt="Prévia do produto" hidden />
               <div id="product-preview-empty" class="empty-art">Envie a foto do produto</div>
             </div>
 
             <div class="product-preview-copy">
-              <span class="preview-label">Link final sera gerado depois do cadastro</span>
+              <span class="preview-label">Link final será gerado depois do cadastro</span>
               <h3 id="product-preview-title">Seu produto aparece aqui</h3>
               <dl class="meta-list">
                 <div>
                   <dt>Mensagem</dt>
-                  <dd id="product-preview-message">Parabens, voce ganhou um smoothie gratis.</dd>
+                  <dd id="product-preview-message">Parabéns, você ganhou um smoothie grátis.</dd>
                 </div>
                 <div>
                   <dt>Arte base</dt>
@@ -110,29 +113,6 @@
             </div>
           </div>
         </section>
-      </section>
-
-      <section class="panel list-panel">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">Links gerados</span>
-            <h2>Produtos cadastrados</h2>
-          </div>
-          <span id="list-count" class="status-badge">0 itens</span>
-        </div>
-
-        <div class="list-toolbar">
-          <label class="field">
-            <span>Buscar na listagem</span>
-            <input id="product-search-input" type="search" placeholder="Busque por nome, mensagem ou link" />
-          </label>
-          <p class="helper-text">A lista abaixo mostra os itens mais recentes primeiro.</p>
-        </div>
-
-        <div id="product-list" class="product-list"></div>
-        <div id="empty-list" class="empty-list" hidden>
-          Nenhum produto cadastrado ainda.
-        </div>
       </section>
     </main>
 

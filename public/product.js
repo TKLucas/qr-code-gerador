@@ -16,14 +16,14 @@ function showError(message) {
   productCard.hidden = true;
   errorState.hidden = false;
   errorState.querySelector('p').textContent = message;
-  document.title = 'Produto indisponivel';
+  document.title = 'Produto indisponível';
 }
 
 async function loadProduct() {
   const slug = getSlugFromPath();
 
   if (!slug) {
-    showError('Produto nao encontrado.');
+    showError('Produto não encontrado.');
     return;
   }
 
@@ -32,20 +32,20 @@ async function loadProduct() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Produto nao encontrado.');
+      throw new Error(data.error || 'Produto não encontrado.');
     }
 
     document.title = `${data.title} | Produto`;
     productPageImage.src = data.productImagePath;
     productPageTitle.textContent = data.title;
-    productPageMessage.textContent = data.rewardMessage || 'Voce ganhou este produto.';
-    productPageSubtitle.textContent = 'Voce ganhou um premio exclusivo.';
+    productPageMessage.textContent = data.rewardMessage || 'Você ganhou este produto.';
+    productPageSubtitle.textContent = 'Você ganhou um prêmio exclusivo.';
 
     loadingState.hidden = true;
     errorState.hidden = true;
     productCard.hidden = false;
   } catch (error) {
-    showError(error.message || 'Nao foi possivel abrir esta pagina.');
+    showError(error.message || 'Não foi possível abrir esta página.');
   }
 }
 

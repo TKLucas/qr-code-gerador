@@ -22,14 +22,14 @@ function showError(message) {
   artCard.hidden = true;
   artError.hidden = false;
   artError.querySelector('p').textContent = message;
-  document.title = 'Arte indisponivel';
+  document.title = 'Arte indisponível';
 }
 
 async function loadArtPage() {
   const slug = getSlugFromPath();
 
   if (!slug) {
-    showError('Produto nao encontrado.');
+    showError('Produto não encontrado.');
     return;
   }
 
@@ -38,14 +38,14 @@ async function loadArtPage() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Produto nao encontrado.');
+      throw new Error(data.error || 'Produto não encontrado.');
     }
 
     currentProduct = data;
     document.title = `${data.title} | Arte`;
     artTitle.textContent = data.title;
     artFinalLink.textContent = data.finalUrl;
-    artRewardMessage.textContent = data.rewardMessage || 'Voce ganhou este produto.';
+    artRewardMessage.textContent = data.rewardMessage || 'Você ganhou este produto.';
     openFinalLinkButton.href = data.finalUrl;
     downloadTransparentQrButton.href = data.qrCode.transparentPng;
 
@@ -59,7 +59,7 @@ async function loadArtPage() {
     artError.hidden = true;
     artCard.hidden = false;
   } catch (error) {
-    showError(error.message || 'Nao foi possivel gerar esta arte.');
+    showError(error.message || 'Não foi possível gerar esta arte.');
   }
 }
 
@@ -88,7 +88,7 @@ copyFinalLinkButton.addEventListener('click', async () => {
       copyFinalLinkButton.textContent = 'Copiar link final';
     }, 1200);
   } catch {
-    showError('Nao foi possivel copiar o link final.');
+    showError('Não foi possível copiar o link final.');
   }
 });
 

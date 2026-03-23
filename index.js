@@ -220,7 +220,7 @@ function normalizeHttpUrl(value, label) {
     }
     return url.toString();
   } catch {
-    throw new Error(`${label} precisa ser uma URL http ou https valida.`);
+    throw new Error(`${label} precisa ser uma URL http ou https válida.`);
   }
 }
 
@@ -355,10 +355,11 @@ function buildProductResponse(req, product) {
   const qrDarkColor = normalizeColorParam(product.qrDarkColor, '#18181b');
   const encodedQrDarkColor = encodeURIComponent(qrDarkColor);
   const encodedStandardQrDarkColor = encodeURIComponent('#000000');
+  const downloadFilename = sanitizeFilename(product.title || product.slug);
 
   return {
     ...product,
-    rewardMessage: product.rewardMessage || 'Voce ganhou este produto.',
+    rewardMessage: product.rewardMessage || 'Você ganhou este produto.',
     qrDarkColor,
     artTemplate: artTemplate
       ? {
@@ -373,12 +374,12 @@ function buildProductResponse(req, product) {
     artPath,
     artUrl,
     qrCode: {
-      preview: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=240&margin=2&filename=${product.slug}&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
-      png: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=540&margin=2&filename=${product.slug}&download=1&darkColor=${encodedStandardQrDarkColor}&lightColor=%23ffffff`,
-      transparentPng: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=540&margin=1&filename=${product.slug}-transparente&download=1&darkColor=${encodedStandardQrDarkColor}&backgroundTransparent=1`,
-      svg: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&format=svg&width=540&margin=2&filename=${product.slug}&download=1&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
-      pdf: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&format=pdf&width=540&margin=2&filename=${product.slug}&download=1&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
-      art: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=360&margin=1&filename=${product.slug}&darkColor=${encodedStandardQrDarkColor}&backgroundTransparent=1`,
+      preview: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=240&margin=2&filename=${downloadFilename}&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
+      png: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=540&margin=2&filename=${downloadFilename}&download=1&darkColor=${encodedStandardQrDarkColor}&lightColor=%23ffffff`,
+      transparentPng: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=540&margin=1&filename=${downloadFilename}-transparente&download=1&darkColor=${encodedStandardQrDarkColor}&backgroundTransparent=1`,
+      svg: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&format=svg&width=540&margin=2&filename=${downloadFilename}&download=1&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
+      pdf: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&format=pdf&width=540&margin=2&filename=${downloadFilename}&download=1&rounded=1&darkColor=${encodedQrDarkColor}&lightColor=%23ffffff`,
+      art: `/api/qrcode?text=${encodeURIComponent(finalUrl)}&width=360&margin=1&filename=${downloadFilename}&darkColor=${encodedStandardQrDarkColor}&backgroundTransparent=1`,
     },
   };
 }
@@ -406,7 +407,7 @@ async function getProductBySlug(req, res, method, slug) {
   const product = productRecord ? normalizeProductRecord(productRecord) : null;
 
   if (!product) {
-    sendJson(res, 404, { error: 'Produto nao encontrado.' }, method);
+    sendJson(res, 404, { error: 'Produto não encontrado.' }, method);
     return;
   }
 
@@ -419,20 +420,20 @@ async function createProduct(req, res) {
   try {
     body = await readJsonBody(req);
   } catch (error) {
-    sendJson(res, 400, { error: error.message || 'Nao foi possivel ler o corpo da requisicao.' }, req.method);
+    sendJson(res, 400, { error: error.message || 'Não foi possível ler o corpo da requisição.' }, req.method);
     return;
   }
 
   try {
-    const title = normalizeTextField(body.title, 90, 'o nome do produto ou premio');
-    const rewardMessage = normalizeTextField(body.rewardMessage, 280, 'a mensagem do premio');
+    const title = normalizeTextField(body.title, 90, 'o nome do produto ou prêmio');
+    const rewardMessage = normalizeTextField(body.rewardMessage, 600, 'a mensagem do prêmio');
     const productImage = normalizeTextField(body.productImage, 8_000_000, 'a foto do produto');
     const artTemplateId = normalizeTextField(body.artTemplateId, 80, 'a arte base selecionada');
     const qrDarkColor = normalizeColorParam(body.qrDarkColor, '#18181b');
     const artTemplate = getArtTemplateById(artTemplateId);
 
     if (!artTemplate) {
-      throw new Error('Selecione uma arte base valida.');
+      throw new Error('Selecione uma arte base válida.');
     }
 
     const slug = await generateUniqueSlug(title);
@@ -449,7 +450,55 @@ async function createProduct(req, res) {
 
     sendJson(res, 201, buildProductResponse(req, normalizeProductRecord(createdProduct.toObject())), req.method);
   } catch (error) {
-    sendJson(res, 400, { error: error.message || 'Nao foi possivel criar o produto.' }, req.method);
+    sendJson(res, 400, { error: error.message || 'Não foi possível criar o produto.' }, req.method);
+  }
+}
+
+async function updateProduct(req, res, slug) {
+  let body;
+
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível ler o corpo da requisição.' }, req.method);
+    return;
+  }
+
+  try {
+    const existingRecord = await Product.findOne({ slug });
+
+    if (!existingRecord) {
+      sendJson(res, 404, { error: 'Produto não encontrado.' }, req.method);
+      return;
+    }
+
+    const title = normalizeTextField(body.title, 90, 'o nome do produto ou prêmio');
+    const rewardMessage = normalizeTextField(body.rewardMessage, 600, 'a mensagem do prêmio');
+    const artTemplateId = normalizeTextField(body.artTemplateId, 80, 'a arte base selecionada');
+    const qrDarkColor = normalizeColorParam(body.qrDarkColor, '#18181b');
+    const artTemplate = getArtTemplateById(artTemplateId);
+
+    if (!artTemplate) {
+      throw new Error('Selecione uma arte base válida.');
+    }
+
+    let productImagePath = existingRecord.productImagePath;
+
+    if (typeof body.productImage === 'string' && body.productImage.trim()) {
+      const productImage = normalizeTextField(body.productImage, 8_000_000, 'a foto do produto');
+      productImagePath = await saveImageFromDataUrl(productImage, 'A foto do produto', existingRecord.slug, 'produto');
+    }
+
+    existingRecord.title = title;
+    existingRecord.rewardMessage = rewardMessage;
+    existingRecord.artTemplateId = artTemplate.id;
+    existingRecord.qrDarkColor = qrDarkColor;
+    existingRecord.productImagePath = productImagePath;
+    await existingRecord.save();
+
+    sendJson(res, 200, buildProductResponse(req, normalizeProductRecord(existingRecord.toObject())), req.method);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível atualizar o produto.' }, req.method);
   }
 }
 
@@ -459,7 +508,7 @@ async function connectDatabase() {
       serverSelectionTimeoutMS: 5000,
     });
   } catch (error) {
-    console.error(`Nao foi possivel conectar ao Mongo em ${MONGO_URI}`);
+    console.error(`Não foi possível conectar ao Mongo em ${MONGO_URI}`);
     throw error;
   }
 }
@@ -674,7 +723,7 @@ async function handleQrRequest(reqUrl, res, method) {
     }, method);
   } catch (error) {
     console.error('Erro ao gerar QR Code:', error);
-    sendJson(res, 500, { error: 'Nao foi possivel gerar o QR Code.' }, method);
+    sendJson(res, 500, { error: 'Não foi possível gerar o QR Code.' }, method);
   }
 }
 
@@ -682,7 +731,7 @@ async function handleArtTemplateImageRequest(res, method, templateId) {
   const template = getArtTemplateById(templateId);
 
   if (!template) {
-    sendJson(res, 404, { error: 'Arte base nao encontrada.' }, method);
+    sendJson(res, 404, { error: 'Arte base não encontrada.' }, method);
     return;
   }
 
@@ -694,7 +743,7 @@ async function handleArtTemplateImageRequest(res, method, templateId) {
       'Cache-Control': 'no-store',
     }, method);
   } catch {
-    sendJson(res, 500, { error: 'Nao foi possivel carregar a arte base.' }, method);
+    sendJson(res, 500, { error: 'Não foi possível carregar a arte base.' }, method);
   }
 }
 
@@ -718,7 +767,7 @@ async function serveStaticFile(reqPath, res, method) {
         : 'no-store',
     }, method);
   } catch {
-    sendJson(res, 404, { error: 'Arquivo nao encontrado.' }, method);
+    sendJson(res, 404, { error: 'Arquivo não encontrado.' }, method);
   }
 }
 
@@ -763,6 +812,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (reqUrl.pathname.startsWith('/api/products/') && method === 'PUT') {
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/products/', '').trim());
+    await updateProduct(req, res, slug);
+    return;
+  }
+
   if (reqUrl.pathname.startsWith('/produto/')) {
     await serveStaticFile('/product.html', res, method);
     return;
@@ -773,8 +828,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (reqUrl.pathname === '/produtos') {
+    await serveStaticFile('/products.html', res, method);
+    return;
+  }
+
   if (!['GET', 'HEAD'].includes(method)) {
-    sendJson(res, 405, { error: 'Metodo nao permitido.' }, method);
+    sendJson(res, 405, { error: 'Método não permitido.' }, method);
     return;
   }
 

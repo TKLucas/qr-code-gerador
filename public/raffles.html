@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR de Sorteio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <main class="admin-shell">
+      <header class="admin-topbar">
+        <a class="admin-brand" href="/">Painel QR</a>
+        <div class="admin-session-panel">
+          <span class="status-badge" data-admin-user>Carregando sessão...</span>
+          <button class="ghost-button" type="button" data-logout-button>Sair</button>
+        </div>
+      </header>
+
+      <section class="hero-card">
+        <div class="hero-copy">
+          <span class="eyebrow">Sorteio</span>
+          <h1>Gere um QR que distribui um produto aleatório por vez.</h1>
+          <p>
+            Cada campanha congela os produtos cadastrados naquele momento. A cada participação,
+            o sistema sorteia um item ainda disponível e nunca repete o mesmo produto dentro da mesma campanha.
+          </p>
+          <div class="hero-actions">
+            <a class="secondary-button button-link" href="/">Voltar ao cadastro</a>
+            <a class="secondary-button button-link" href="/produtos">Ver produtos</a>
+          </div>
+        </div>
+        <div class="hero-steps">
+          <span>1. Criar campanha</span>
+          <span>2. Gerar QR</span>
+          <span>3. Sortear produto</span>
+          <span>4. Encerrar ao esgotar</span>
+        </div>
+      </section>
+
+      <section class="dashboard-grid raffle-dashboard-grid">
+        <form id="raffle-form" class="panel form-panel">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Nova campanha</span>
+              <h2>QR de sorteio</h2>
+            </div>
+            <span id="raffle-form-badge" class="status-badge">Pronto</span>
+          </div>
+
+          <label class="field">
+            <span>Nome do sorteio</span>
+            <input
+              id="raffle-name-input"
+              name="name"
+              type="text"
+              maxlength="90"
+              placeholder="Promoção do dia"
+              required
+            />
+          </label>
+
+          <p id="raffle-selection-summary" class="helper-text">
+            Ao clicar em criar sorteio, você escolhe os produtos em um modal antes de confirmar a campanha.
+          </p>
+
+          <div class="form-actions">
+            <button id="raffle-submit-button" class="primary-button" type="submit">Criar sorteio</button>
+            <p id="raffle-form-status" class="helper-text">
+              Defina o nome e monte a lista de produtos no próximo passo. Cada item pode sair apenas uma vez.
+            </p>
+          </div>
+        </form>
+
+        <section class="panel raffle-preview-panel">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">QR gerado</span>
+              <h2>Campanha ativa</h2>
+            </div>
+            <span id="raffle-preview-badge" class="status-badge">Aguardando</span>
+          </div>
+
+          <div id="raffle-preview-empty" class="empty-art raffle-preview-empty">
+            Crie um sorteio para gerar o QR e o link público.
+          </div>
+
+          <article id="raffle-preview-card" class="raffle-qr-card" hidden>
+            <div class="raffle-qr-image-shell">
+              <img id="raffle-preview-image" alt="QR Code do sorteio" />
+            </div>
+
+            <div class="raffle-qr-copy">
+              <h3 id="raffle-preview-name"></h3>
+              <div class="product-link-panel">
+                <span class="product-link-label">Link público</span>
+                <a id="raffle-preview-link" class="product-link-anchor" href="#" target="_blank" rel="noreferrer"></a>
+              </div>
+
+              <dl class="meta-list compact">
+                <div>
+                  <dt>Total de produtos</dt>
+                  <dd id="raffle-preview-total"></dd>
+                </div>
+                <div>
+                  <dt>Restantes</dt>
+                  <dd id="raffle-preview-remaining"></dd>
+                </div>
+              </dl>
+
+              <div id="raffle-preview-products" class="raffle-selected-products" hidden>
+                <span class="product-link-label">Produtos deste sorteio</span>
+                <div id="raffle-preview-product-chips" class="raffle-selected-chips"></div>
+              </div>
+
+              <div class="product-card-actions raffle-preview-actions">
+                <button type="button" class="secondary-button" data-action="copy-preview-link">Copiar link</button>
+                <a id="raffle-preview-open-link" class="secondary-button button-link" href="#" target="_blank" rel="noreferrer">Abrir sorteio</a>
+                <a id="raffle-preview-download-link" class="secondary-button button-link" href="#">Baixar QR PNG</a>
+                <button id="raffle-preview-delete-button" type="button" class="ghost-button" data-action="delete-raffle">Excluir sorteio</button>
+              </div>
+            </div>
+          </article>
+        </section>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Campanhas criadas</span>
+            <h2>Sorteios</h2>
+          </div>
+          <span id="raffle-list-count" class="status-badge">0 itens</span>
+        </div>
+
+        <p id="raffle-list-status" class="helper-text">
+          Cada campanha usa seus próprios produtos elegíveis e controla o saldo restante.
+        </p>
+
+        <div id="raffle-list" class="raffle-list"></div>
+        <div id="raffle-empty-list" class="empty-list" hidden>
+          Nenhum sorteio criado ainda.
+        </div>
+      </section>
+    </main>
+
+    <div id="raffle-selection-modal" class="modal-shell" hidden>
+      <div class="modal-backdrop" data-modal-close="selection"></div>
+
+      <section class="modal-card raffle-selection-modal-card" role="dialog" aria-modal="true" aria-labelledby="raffle-selection-modal-title">
+        <div class="section-heading raffle-selection-heading">
+          <div>
+            <span class="eyebrow">Produtos do sorteio</span>
+            <h2 id="raffle-selection-modal-title">Selecione os produtos da campanha</h2>
+            <p id="raffle-selection-status" class="helper-text">
+              Carregando produtos para seleção...
+            </p>
+          </div>
+          <button type="button" class="ghost-button" data-modal-close="selection">Fechar</button>
+        </div>
+
+        <div class="product-card-actions raffle-selection-actions">
+          <button type="button" class="secondary-button" data-selection-action="select-all">Selecionar todos</button>
+          <button type="button" class="secondary-button" data-selection-action="clear-all">Limpar</button>
+        </div>
+
+        <div id="raffle-product-selection" class="raffle-selection-list"></div>
+        <div id="raffle-selection-empty" class="empty-list" hidden>
+          Nenhum produto cadastrado ainda.
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="secondary-button" data-modal-close="selection">Cancelar</button>
+          <button id="raffle-confirm-create-button" class="primary-button" type="button">Confirmar sorteio</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="/admin-auth.js" defer></script>
+    <script src="/raffles.js" defer></script>
+  </body>
+</html>

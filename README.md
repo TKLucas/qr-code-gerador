@@ -1,6 +1,7 @@
 # Painel QR com Autenticação
 
 Aplicação Node.js com frontend estático para cadastrar produtos, gerar links públicos e baixar a arte final com QR Code.
+Também inclui campanhas de sorteio com QR público: cada campanha usa um conjunto fechado de produtos e cada item só pode sair uma vez dentro daquele sorteio.
 
 ## Como funciona a autenticação
 
@@ -16,7 +17,10 @@ Públicas:
 
 - `/login`
 - `/produto/:slug`
+- `/sorteio/:slug`
 - `/api/public/products/:slug`
+- `/api/public/raffles/:slug`
+- `/api/public/raffles/:slug/draw`
 - `/api/public/art-templates/:id/image`
 - Assets públicos necessários para a página do produto, como `/styles.css`, `/product.js` e `/uploads/...`
 
@@ -24,9 +28,11 @@ Privadas:
 
 - `/`
 - `/produtos`
+- `/sorteios`
 - `/arte/:slug`
 - `/api/products`
 - `/api/products/:slug`
+- `/api/raffles`
 - `/api/art-templates`
 - `/api/art-templates/:id/image`
 - `/api/qrcode`
@@ -69,5 +75,8 @@ Se algum argumento não for informado, o script tenta usar a variável correspon
 - `/login`: tela de autenticação.
 - `/`: cadastro e edição de produto.
 - `/produtos`: listagem privada de produtos.
+- `/sorteios`: criação de campanhas de sorteio com QR público.
+- Ao criar um sorteio, o sistema congela os produtos cadastrados naquele momento como elegíveis para aquela campanha.
 - `/arte/:slug`: arte final privada para download.
 - `/produto/:slug`: página pública final do produto.
+- `/sorteio/:slug`: página pública que consome 1 produto aleatório ainda não distribuído naquela campanha.

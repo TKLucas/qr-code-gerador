@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sorteio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="raffle-page">
+    <div class="product-page-waves" aria-hidden="true">
+      <span class="product-wave product-wave-far"></span>
+      <span class="product-wave product-wave-back"></span>
+      <span class="product-wave product-wave-mid"></span>
+      <span class="product-wave product-wave-front"></span>
+    </div>
+
+    <main class="product-shell">
+      <section id="raffle-loading" class="state-card">Carregando sorteio...</section>
+
+      <section id="raffle-error" class="state-card" hidden>
+        <p>Não foi possível abrir este sorteio.</p>
+      </section>
+
+      <section id="raffle-card" class="raffle-public-card" hidden>
+        <span class="product-page-kicker">Sorteio ativo</span>
+
+        <div class="product-page-hero">
+          <div class="product-page-icons" aria-hidden="true">
+            <span>✦</span>
+            <span>🎁</span>
+            <span>✦</span>
+          </div>
+          <h1 id="raffle-title">Sorteio</h1>
+          <p id="raffle-subtitle">Estamos sorteando automaticamente um produto aleatório disponível para você.</p>
+        </div>
+
+        <div class="raffle-public-status">
+          <div class="raffle-public-stat">
+            <strong id="raffle-remaining-count">0</strong>
+            <span>produtos restantes</span>
+          </div>
+          <div class="raffle-public-stat">
+            <strong id="raffle-total-count">0</strong>
+            <span>produtos na campanha</span>
+          </div>
+        </div>
+
+        <div id="raffle-product-preview" class="product-page-image-shell raffle-result-visual" hidden>
+          <img id="raffle-product-image" alt="" />
+        </div>
+
+        <div class="product-info-card">
+          <div class="product-info-copy">
+            <h2 id="raffle-result-title">Preparando seu sorteio</h2>
+            <p id="raffle-result-message">
+              Assim que a página carregar, o sistema reserva um prêmio aleatório desta campanha e mostra o resultado aqui.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/raffle.js" defer></script>
+  </body>
+</html>

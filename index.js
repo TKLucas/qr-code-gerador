@@ -66,6 +66,8 @@ const Product = createProductModel();
 const User = createUserModel();
 const AdminSession = createSessionModel();
 const UploadAsset = createUploadAssetModel();
+const RaffleCampaign = createRaffleCampaignModel();
+const RaffleDraw = createRaffleDrawModel();
 await migrateLegacyProducts();
 await ensureInitialAdmin();
 await syncExistingUploadsToDatabase();
@@ -326,6 +328,30 @@ function normalizeProductRecord(product) {
     productImagePath: product.productImagePath,
     createdAt: product.createdAt instanceof Date ? product.createdAt.toISOString() : product.createdAt,
     updatedAt: product.updatedAt instanceof Date ? product.updatedAt.toISOString() : product.updatedAt,
+  };
+}
+
+function normalizeRaffleCampaignRecord(raffle) {
+  return {
+    id: String(raffle._id),
+    slug: raffle.slug,
+    name: raffle.name,
+    eligibleProductIds: Array.isArray(raffle.eligibleProductIds)
+      ? raffle.eligibleProductIds.map((item) => String(item))
+      : [],
+    selectedProducts: Array.isArray(raffle.selectedProducts)
+      ? raffle.selectedProducts
+        .map((item) => ({
+          id: String(item.id || item._id || ''),
+          slug: item.slug || '',
+          title: item.title || '',
+          productImagePath: item.productImagePath || '',
+        }))
+        .filter((item) => item.id && item.title)
+      : [],
+    totalProducts: Number(raffle.totalProducts) || 0,
+    createdAt: raffle.createdAt instanceof Date ? raffle.createdAt.toISOString() : raffle.createdAt,
+    updatedAt: raffle.updatedAt instanceof Date ? raffle.updatedAt.toISOString() : raffle.updatedAt,
   };
 }
 
@@ -776,6 +802,403 @@ function buildPublicProductResponse(product) {
   };
 }
 
+function buildRaffleResponse(req, raffle, drawCount = 0) {
+  const publicPath = `/sorteio/${raffle.slug}`;
+  const publicUrl = toAbsoluteUrl(req, publicPath);
+  const safeName = sanitizeFilename(raffle.name || raffle.slug || 'sorteio');
+  const totalProducts = Number(raffle.totalProducts) || 0;
+  const drawnProducts = Math.max(0, Number(drawCount) || 0);
+  const remainingProducts = Math.max(0, totalProducts - drawnProducts);
+
+  return {
+    ...raffle,
+    selectedProducts: Array.isArray(raffle.selectedProducts) ? raffle.selectedProducts : [],
+    publicPath,
+    publicUrl,
+    drawnProducts,
+    remainingProducts,
+    exhausted: remainingProducts === 0,
+    qrCode: {
+      preview: `/api/qrcode?text=${encodeURIComponent(publicUrl)}&width=240&margin=1&filename=${safeName}-sorteio&darkColor=%23000000&backgroundTransparent=1`,
+      png: `/api/qrcode?text=${encodeURIComponent(publicUrl)}&width=540&margin=1&filename=${safeName}-sorteio&download=1&darkColor=%23000000&backgroundTransparent=1`,
+      svg: `/api/qrcode?text=${encodeURIComponent(publicUrl)}&format=svg&width=540&margin=2&filename=${safeName}-sorteio&download=1&rounded=1&darkColor=%23e72636&lightColor=%23ffffff`,
+    },
+  };
+}
+
+async function attachSelectedProductsToRaffles(raffles = []) {
+  if (!raffles.length) {
+    return [];
+  }
+
+  const raffleIds = raffles.map((item) => item.id).filter(Boolean);
+  const productIds = [...new Set(
+    raffles.flatMap((item) => Array.isArray(item.eligibleProductIds) ? item.eligibleProductIds : [])
+  )].filter(Boolean);
+
+  if (!productIds.length) {
+    return raffles.map((item) => ({ ...item, selectedProducts: [] }));
+  }
+
+  const objectIds = productIds.map((id) => new mongoose.Types.ObjectId(id));
+  const productRecords = await Product.find(
+    { _id: { $in: objectIds } },
+    { _id: 1, slug: 1, title: 1, productImagePath: 1 }
+  ).lean();
+
+  const productMap = new Map(
+    productRecords.map((item) => [
+      String(item._id),
+      {
+        id: String(item._id),
+        slug: item.slug,
+        title: item.title,
+        productImagePath: item.productImagePath || '',
+      },
+    ])
+  );
+
+  const drawRecords = raffleIds.length
+    ? await RaffleDraw.find(
+      {
+        raffleId: {
+          $in: raffleIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+      },
+      { _id: 1, raffleId: 1, productId: 1, createdAt: 1 }
+    ).lean()
+    : [];
+
+  const drawnByRaffle = new Map();
+
+  drawRecords.forEach((item) => {
+    const raffleId = String(item.raffleId);
+    const productId = String(item.productId);
+    const product = productMap.get(productId);
+    const entry = {
+      id: productId,
+      slug: product?.slug || '',
+      title: product?.title || 'Produto distribuído',
+      productImagePath: product?.productImagePath || '',
+      drawId: String(item._id),
+      drawnAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+      isDrawn: true,
+    };
+
+    const existing = drawnByRaffle.get(raffleId) || [];
+    existing.push(entry);
+    drawnByRaffle.set(raffleId, existing);
+  });
+
+  return raffles.map((item) => {
+    const drawnProductsList = (drawnByRaffle.get(item.id) || []).sort((left, right) =>
+      String(right.drawnAt || '').localeCompare(String(left.drawnAt || ''))
+    );
+    const drawnIdSet = new Set(drawnProductsList.map((product) => product.id));
+    const availableProducts = item.eligibleProductIds
+      .map((productId) => productMap.get(String(productId)))
+      .filter(Boolean)
+      .filter((product) => !drawnIdSet.has(product.id))
+      .map((product) => ({
+        ...product,
+        drawId: '',
+        drawnAt: '',
+        isDrawn: false,
+      }));
+
+    return {
+      ...item,
+      selectedProducts: [...drawnProductsList, ...availableProducts],
+      drawnProductsList,
+      availableProducts,
+    };
+  });
+}
+
+async function getRaffleDrawCountMap(raffleIds = []) {
+  if (!raffleIds.length) {
+    return new Map();
+  }
+
+  const objectIds = raffleIds.map((id) => new mongoose.Types.ObjectId(id));
+  const counts = await RaffleDraw.aggregate([
+    {
+      $match: {
+        raffleId: { $in: objectIds },
+      },
+    },
+    {
+      $group: {
+        _id: '$raffleId',
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return new Map(counts.map((item) => [String(item._id), item.count]));
+}
+
+async function listRaffles(req, res, method) {
+  const raffles = await RaffleCampaign.find({}).sort({ createdAt: -1 }).lean();
+  const normalized = await attachSelectedProductsToRaffles(raffles.map(normalizeRaffleCampaignRecord));
+  const drawCountMap = await getRaffleDrawCountMap(normalized.map((item) => item.id));
+
+  sendJson(res, 200, {
+    items: normalized.map((item) => buildRaffleResponse(req, item, drawCountMap.get(item.id) || 0)),
+  }, method);
+}
+
+async function createRaffle(req, res) {
+  let body;
+
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível ler o corpo da requisição.' }, req.method);
+    return;
+  }
+
+  try {
+    const name = normalizeTextField(body.name, 90, 'o nome do sorteio');
+    const productIds = Array.isArray(body.productIds)
+      ? [...new Set(body.productIds.map((item) => String(item || '').trim()).filter(Boolean))]
+      : [];
+
+    if (!productIds.length) {
+      throw new Error('Selecione ao menos um produto para este sorteio.');
+    }
+
+    const hasInvalidId = productIds.some((item) => !mongoose.isValidObjectId(item));
+
+    if (hasInvalidId) {
+      throw new Error('A seleção de produtos deste sorteio é inválida.');
+    }
+
+    const objectIds = productIds.map((item) => new mongoose.Types.ObjectId(item));
+    const productRecords = await Product.find(
+      { _id: { $in: objectIds } },
+      { _id: 1, slug: 1, title: 1, productImagePath: 1 }
+    ).lean();
+
+    if (!productRecords.length) {
+      throw new Error('Cadastre ao menos um produto antes de criar um sorteio.');
+    }
+
+    const productMap = new Map(productRecords.map((item) => [String(item._id), item]));
+    const selectedProducts = productIds
+      .map((item) => productMap.get(item))
+      .filter(Boolean)
+      .map((item) => ({
+        id: String(item._id),
+        slug: item.slug,
+        title: item.title,
+        productImagePath: item.productImagePath || '',
+      }));
+
+    if (selectedProducts.length !== productIds.length) {
+      throw new Error('Um ou mais produtos selecionados não foram encontrados.');
+    }
+
+    const slug = await generateUniqueRaffleSlug(name);
+    const raffleRecord = await RaffleCampaign.create({
+      slug,
+      name,
+      eligibleProductIds: selectedProducts.map((item) => new mongoose.Types.ObjectId(item.id)),
+      totalProducts: selectedProducts.length,
+    });
+
+    const raffle = normalizeRaffleCampaignRecord({
+      ...raffleRecord.toObject(),
+      selectedProducts,
+    });
+    sendJson(res, 201, buildRaffleResponse(req, raffle, 0), req.method);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível criar o sorteio.' }, req.method);
+  }
+}
+
+async function restoreDrawnProductToRaffle(req, res, raffleId, productId) {
+  if (!mongoose.isValidObjectId(raffleId) || !mongoose.isValidObjectId(productId)) {
+    sendJson(res, 400, { error: 'Os identificadores do sorteio ou do produto são inválidos.' }, req.method);
+    return;
+  }
+
+  const raffleRecord = await RaffleCampaign.findById(raffleId).lean();
+
+  if (!raffleRecord) {
+    sendJson(res, 404, { error: 'Sorteio não encontrado.' }, req.method);
+    return;
+  }
+
+  const eligibleProductIds = Array.isArray(raffleRecord.eligibleProductIds)
+    ? raffleRecord.eligibleProductIds.map((item) => String(item))
+    : [];
+
+  if (!eligibleProductIds.includes(productId)) {
+    sendJson(res, 404, { error: 'Este produto não está vinculado a este sorteio.' }, req.method);
+    return;
+  }
+
+  const raffleObjectId = new mongoose.Types.ObjectId(raffleId);
+  const productObjectId = new mongoose.Types.ObjectId(productId);
+  const drawRecord = await RaffleDraw.findOne({
+    raffleId: raffleObjectId,
+    productId: productObjectId,
+  }).lean();
+
+  if (!drawRecord) {
+    sendJson(res, 409, { error: 'Este produto ainda não foi sorteado nesta campanha.' }, req.method);
+    return;
+  }
+
+  await RaffleDraw.deleteOne({ _id: drawRecord._id });
+
+  const updatedRecord = await RaffleCampaign.findById(raffleObjectId).lean();
+  const [raffle] = await attachSelectedProductsToRaffles([
+    normalizeRaffleCampaignRecord(updatedRecord),
+  ]);
+  const drawCountMap = await getRaffleDrawCountMap([raffle.id]);
+
+  sendJson(res, 200, buildRaffleResponse(req, raffle, drawCountMap.get(raffle.id) || 0), req.method);
+}
+
+async function deleteRaffle(req, res, raffleId) {
+  if (!mongoose.isValidObjectId(raffleId)) {
+    sendJson(res, 400, { error: 'O identificador do sorteio é inválido.' }, req.method);
+    return;
+  }
+
+  const raffleObjectId = new mongoose.Types.ObjectId(raffleId);
+  const raffleRecord = await RaffleCampaign.findById(raffleObjectId).lean();
+
+  if (!raffleRecord) {
+    sendJson(res, 404, { error: 'Sorteio não encontrado.' }, req.method);
+    return;
+  }
+
+  await RaffleDraw.deleteMany({ raffleId: raffleObjectId });
+  await RaffleCampaign.deleteOne({ _id: raffleObjectId });
+
+  sendJson(res, 200, {
+    success: true,
+    id: String(raffleRecord._id),
+  }, req.method);
+}
+
+async function getPublicRaffleBySlug(req, res, method, slug) {
+  const raffleRecord = await RaffleCampaign.findOne({ slug }).lean();
+
+  if (!raffleRecord) {
+    sendJson(res, 404, { error: 'Sorteio não encontrado.' }, method);
+    return;
+  }
+
+  const raffle = normalizeRaffleCampaignRecord(raffleRecord);
+  const drawCountMap = await getRaffleDrawCountMap([raffle.id]);
+  const payload = buildRaffleResponse(req, raffle, drawCountMap.get(raffle.id) || 0);
+
+  sendJson(res, 200, {
+    slug: payload.slug,
+    name: payload.name,
+    publicPath: payload.publicPath,
+    publicUrl: payload.publicUrl,
+    totalProducts: payload.totalProducts,
+    drawnProducts: payload.drawnProducts,
+    remainingProducts: payload.remainingProducts,
+    exhausted: payload.exhausted,
+  }, method);
+}
+
+async function drawRaffleProduct(req, res, slug) {
+  const raffleRecord = await RaffleCampaign.findOne({ slug }).lean();
+
+  if (!raffleRecord) {
+    sendJson(res, 404, { error: 'Sorteio não encontrado.' }, req.method);
+    return;
+  }
+
+  const raffleId = raffleRecord._id;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const drawRecords = await RaffleDraw.find({ raffleId }, { productId: 1, _id: 0 }).lean();
+    const drawnProductIds = drawRecords.map((item) => item.productId);
+    const drawnCount = drawnProductIds.length;
+
+    if (drawnCount >= raffleRecord.totalProducts) {
+      sendJson(res, 409, {
+        error: 'Todos os produtos deste sorteio já foram distribuídos.',
+        exhausted: true,
+      }, req.method);
+      return;
+    }
+
+    const availableProducts = await Product.aggregate([
+      {
+        $match: {
+          _id: {
+            $in: raffleRecord.eligibleProductIds,
+            $nin: drawnProductIds,
+          },
+        },
+      },
+      {
+        $sample: {
+          size: 1,
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          slug: 1,
+          title: 1,
+          rewardMessage: 1,
+          productImagePath: 1,
+        },
+      },
+    ]);
+
+    const selectedProduct = availableProducts[0];
+
+    if (!selectedProduct) {
+      sendJson(res, 409, {
+        error: 'Todos os produtos deste sorteio já foram distribuídos.',
+        exhausted: true,
+      }, req.method);
+      return;
+    }
+
+    try {
+      await RaffleDraw.create({
+        raffleId,
+        productId: selectedProduct._id,
+      });
+
+      sendJson(res, 200, {
+        exhausted: false,
+        product: {
+          slug: selectedProduct.slug,
+          title: selectedProduct.title,
+          rewardMessage: selectedProduct.rewardMessage || 'Você ganhou este produto.',
+          productImagePath: selectedProduct.productImagePath || '',
+          path: `/produto/${selectedProduct.slug}`,
+        },
+      }, req.method);
+      return;
+    } catch (error) {
+      if (error?.code === 11000) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  sendJson(res, 409, {
+    error: 'Não foi possível concluir o sorteio agora. Tente novamente.',
+    exhausted: false,
+  }, req.method);
+}
+
 async function listProducts(req, res, method) {
   const products = await readProducts();
   const ordered = products.map((product) => buildProductResponse(req, product));
@@ -994,12 +1417,85 @@ function createUploadAssetModel() {
   return mongoose.models.UploadAsset || mongoose.model('UploadAsset', uploadAssetSchema);
 }
 
+function createRaffleCampaignModel() {
+  const raffleCampaignSchema = new mongoose.Schema(
+    {
+      slug: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true,
+      },
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+      eligibleProductIds: {
+        type: [mongoose.Schema.Types.ObjectId],
+        required: true,
+        default: [],
+      },
+      totalProducts: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+    },
+    {
+      timestamps: true,
+      versionKey: false,
+    }
+  );
+
+  return mongoose.models.RaffleCampaign || mongoose.model('RaffleCampaign', raffleCampaignSchema);
+}
+
+function createRaffleDrawModel() {
+  const raffleDrawSchema = new mongoose.Schema(
+    {
+      raffleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RaffleCampaign',
+        required: true,
+        index: true,
+      },
+      productId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
+        required: true,
+      },
+    },
+    {
+      timestamps: true,
+      versionKey: false,
+    }
+  );
+
+  raffleDrawSchema.index({ raffleId: 1, productId: 1 }, { unique: true });
+
+  return mongoose.models.RaffleDraw || mongoose.model('RaffleDraw', raffleDrawSchema);
+}
+
 async function generateUniqueSlug(title) {
   const baseSlug = createSlug(title);
   let slug = baseSlug;
   let attempt = 0;
 
   while (await Product.exists({ slug })) {
+    attempt += 1;
+    slug = `${baseSlug}-${crypto.randomUUID().slice(0, 4 + Math.min(attempt, 2))}`;
+  }
+
+  return slug;
+}
+
+async function generateUniqueRaffleSlug(name) {
+  const baseSlug = createSlug(name);
+  let slug = baseSlug;
+  let attempt = 0;
+
+  while (await RaffleCampaign.exists({ slug })) {
     attempt += 1;
     slug = `${baseSlug}-${crypto.randomUUID().slice(0, 4 + Math.min(attempt, 2))}`;
   }
@@ -1263,6 +1759,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (reqUrl.pathname.startsWith('/api/public/raffles/') && reqUrl.pathname.endsWith('/draw') && method === 'POST') {
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/public/raffles/', '').replace('/draw', '').replace(/\/$/, ''));
+
+    try {
+      await drawRaffleProduct(req, res, slug);
+    } catch (error) {
+      console.error('Erro ao sortear produto:', error);
+      sendJson(res, 500, { error: 'Não foi possível concluir o sorteio.' }, method);
+    }
+
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/public/raffles/') && ['GET', 'HEAD'].includes(method)) {
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/public/raffles/', '').replace(/\/$/, ''));
+    await getPublicRaffleBySlug(req, res, method, slug);
+    return;
+  }
+
   if (reqUrl.pathname.startsWith('/api/public/products/') && ['GET', 'HEAD'].includes(method)) {
     const slug = decodeURIComponent(reqUrl.pathname.replace('/api/public/products/', '').trim());
     await getPublicProductBySlug(res, method, slug);
@@ -1277,6 +1792,11 @@ const server = http.createServer(async (req, res) => {
 
   if (reqUrl.pathname.startsWith('/produto/')) {
     await serveStaticFile('/product.html', res, method);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/sorteio/')) {
+    await serveStaticFile('/raffle.html', res, method);
     return;
   }
 
@@ -1322,6 +1842,54 @@ const server = http.createServer(async (req, res) => {
     }
 
     await listProducts(req, res, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/raffles' && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await listRaffles(req, res, method);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/raffles/') && method === 'DELETE' && !reqUrl.pathname.includes('/products/')) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    const raffleId = reqUrl.pathname.split('/').filter(Boolean)[2] || '';
+    await deleteRaffle(req, res, raffleId);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/raffles/') && reqUrl.pathname.includes('/products/') && method === 'DELETE') {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    const segments = reqUrl.pathname.split('/').filter(Boolean);
+    const raffleId = segments[2] || '';
+    const productId = segments[4] || '';
+    await restoreDrawnProductToRaffle(req, res, raffleId, productId);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/raffles' && method === 'POST') {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await createRaffle(req, res);
     return;
   }
 
@@ -1393,6 +1961,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (['/sorteios', '/raffles.html'].includes(reqUrl.pathname)) {
+    const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await serveStaticFile('/raffles.html', res, method);
+    return;
+  }
+
   if (reqUrl.pathname === '/art.html' && ['GET', 'HEAD'].includes(method)) {
     const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
 
@@ -1405,6 +1984,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (reqUrl.pathname === '/product.html' && ['GET', 'HEAD'].includes(method)) {
+    sendJson(res, 404, { error: 'Página não encontrada.' }, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/raffle.html' && ['GET', 'HEAD'].includes(method)) {
     sendJson(res, 404, { error: 'Página não encontrada.' }, method);
     return;
   }

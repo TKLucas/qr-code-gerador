@@ -10,9 +10,22 @@ export const DEFAULT_ADMIN_NAME = 'Administrador';
 export const DEFAULT_ADMIN_LOGIN = 'admin';
 export const DEFAULT_ADMIN_EMAIL = 'admin@example.local';
 export const DEFAULT_ADMIN_PASSWORD = 'admin123456';
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 function normalizeWhitespace(value = '') {
   return String(value).trim().replace(/\s+/g, ' ');
+}
+
+function readConfigValue(value = '') {
+  return String(value).trim();
+}
+
+function isValidEmail(value = '') {
+  return EMAIL_PATTERN.test(readConfigValue(value).toLowerCase());
+}
+
+function buildFallbackEmail(login = DEFAULT_ADMIN_LOGIN) {
+  return `${normalizeLogin(login)}@example.local`;
 }
 
 export function normalizeDisplayName(value = '') {
@@ -30,13 +43,13 @@ export function normalizeDisplayName(value = '') {
 }
 
 export function normalizeEmail(value = '') {
-  const normalized = String(value).trim().toLowerCase();
+  const normalized = readConfigValue(value).toLowerCase();
 
   if (!normalized) {
     throw new Error('Informe o e-mail do administrador.');
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(normalized)) {
+  if (!isValidEmail(normalized)) {
     throw new Error('Informe um e-mail de administrador válido.');
   }
 
@@ -136,10 +149,14 @@ export function buildAdminCredentials(input = {}) {
 }
 
 export function getInitialAdminConfig(env = process.env) {
-  const email = env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
-  const login = env.ADMIN_LOGIN || deriveLoginFromEmail(email);
-  const password = env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
-  const name = env.ADMIN_NAME || DEFAULT_ADMIN_NAME;
+  const rawEmail = readConfigValue(env.ADMIN_EMAIL);
+  const rawLogin = readConfigValue(env.ADMIN_LOGIN);
+  const name = readConfigValue(env.ADMIN_NAME) || DEFAULT_ADMIN_NAME;
+  const password = readConfigValue(env.ADMIN_PASSWORD) || DEFAULT_ADMIN_PASSWORD;
+  const login = normalizeLogin(
+    rawLogin || (isValidEmail(rawEmail) ? deriveLoginFromEmail(rawEmail) : DEFAULT_ADMIN_LOGIN)
+  );
+  const email = isValidEmail(rawEmail) ? rawEmail.toLowerCase() : buildFallbackEmail(login);
 
   return buildAdminCredentials({ name, email, login, password });
 }

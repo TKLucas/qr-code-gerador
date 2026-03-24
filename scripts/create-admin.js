@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import process from 'node:process';
-import { createUserModel, upsertAdminUser } from '../auth.js';
+import { createUserModel, getInitialAdminConfig, upsertAdminUser } from '../auth.js';
 
 process.loadEnvFile();
 
@@ -38,11 +38,12 @@ async function main() {
 
   try {
     const User = createUserModel();
+    const initialConfig = getInitialAdminConfig(process.env);
     const result = await upsertAdminUser(User, {
-      name: args.name || process.env.ADMIN_NAME,
-      email: args.email || process.env.ADMIN_EMAIL,
-      login: args.login || process.env.ADMIN_LOGIN,
-      password: args.password || process.env.ADMIN_PASSWORD,
+      name: args.name || initialConfig.name,
+      email: args.email || initialConfig.email,
+      login: args.login || initialConfig.login,
+      password: args.password || initialConfig.password,
     });
 
     console.log(result.created ? 'Usuário admin criado.' : 'Usuário admin atualizado.');

@@ -656,10 +656,15 @@ async function ensureInitialAdmin() {
 
   const config = getInitialAdminConfig(process.env);
   await upsertAdminUser(User, config);
+  const configuredEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 
   const usingDefaultPassword = !process.env.ADMIN_PASSWORD;
   console.warn('[auth] Usuário admin inicial criado.');
   console.warn(`[auth] Login: ${config.login} | E-mail: ${config.email}`);
+
+  if (configuredEmail && configuredEmail !== config.email) {
+    console.warn('[auth] ADMIN_EMAIL inválido no ambiente. Foi aplicado um e-mail fallback para concluir o bootstrap.');
+  }
 
   if (usingDefaultPassword) {
     console.warn('[auth] A senha padrão está ativa. Defina ADMIN_PASSWORD ou rode npm run admin:create.');

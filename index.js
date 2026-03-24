@@ -6,6 +6,19 @@ import path from 'node:path';
 import process from 'node:process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import PDFDocument from 'pdfkit';
+import {
+  ADMIN_SESSION_COOKIE,
+  SESSION_DURATION_MS,
+  createSessionModel,
+  createSessionToken,
+  createUserModel,
+  getInitialAdminConfig,
+  hashSessionToken,
+  normalizeIdentifier,
+  normalizePassword,
+  upsertAdminUser,
+  verifyPassword,
+} from './auth.js';
 import { generateQrCode } from './qr-generator.js';
 
 process.loadEnvFile();
@@ -40,10 +53,20 @@ const IMAGE_EXTENSIONS = {
   'image/webp': 'webp',
 };
 
+const PUBLIC_STATIC_PATHS = new Set([
+  '/styles.css',
+  '/product.js',
+  '/login.js',
+  '/login.html',
+]);
+
 await ensureStorage();
 await connectDatabase();
 const Product = createProductModel();
+const User = createUserModel();
+const AdminSession = createSessionModel();
 await migrateLegacyProducts();
+await ensureInitialAdmin();
 
 function normalizeQrText(input = '') {
   const trimmed = input.trim();
@@ -346,6 +369,305 @@ async function readJsonBody(req) {
   });
 }
 
+function isSecureRequest(req) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+
+  if (typeof forwardedProto === 'string' && forwardedProto) {
+    return forwardedProto.split(',')[0].trim() === 'https';
+  }
+
+  return false;
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+
+  return header
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((cookies, part) => {
+      const separatorIndex = part.indexOf('=');
+
+      if (separatorIndex < 0) {
+        return cookies;
+      }
+
+      const key = part.slice(0, separatorIndex).trim();
+      const value = part.slice(separatorIndex + 1).trim();
+      cookies[key] = decodeURIComponent(value);
+      return cookies;
+    }, {});
+}
+
+function serializeCookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+
+  if (options.maxAge !== undefined) {
+    parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge / 1000))}`);
+  }
+
+  if (options.expires instanceof Date) {
+    parts.push(`Expires=${options.expires.toUTCString()}`);
+  }
+
+  parts.push(`Path=${options.path || '/'}`);
+
+  if (options.httpOnly) {
+    parts.push('HttpOnly');
+  }
+
+  if (options.sameSite) {
+    parts.push(`SameSite=${options.sameSite}`);
+  }
+
+  if (options.secure) {
+    parts.push('Secure');
+  }
+
+  return parts.join('; ');
+}
+
+function appendSetCookieHeader(res, cookieValue) {
+  const current = res.getHeader('Set-Cookie');
+
+  if (!current) {
+    res.setHeader('Set-Cookie', cookieValue);
+    return;
+  }
+
+  const values = Array.isArray(current) ? current.concat(cookieValue) : [current, cookieValue];
+  res.setHeader('Set-Cookie', values);
+}
+
+function setSessionCookie(req, res, token) {
+  appendSetCookieHeader(
+    res,
+    serializeCookie(ADMIN_SESSION_COOKIE, token, {
+      httpOnly: true,
+      maxAge: SESSION_DURATION_MS,
+      path: '/',
+      sameSite: 'Lax',
+      secure: isSecureRequest(req),
+    })
+  );
+}
+
+function clearSessionCookie(req, res) {
+  appendSetCookieHeader(
+    res,
+    serializeCookie(ADMIN_SESSION_COOKIE, '', {
+      httpOnly: true,
+      maxAge: 0,
+      expires: new Date(0),
+      path: '/',
+      sameSite: 'Lax',
+      secure: isSecureRequest(req),
+    })
+  );
+}
+
+function sanitizeUser(user) {
+  return {
+    id: String(user._id),
+    name: user.name,
+    email: user.email,
+    login: user.login,
+    role: user.role,
+  };
+}
+
+async function destroySessionByToken(token) {
+  if (!token) {
+    return;
+  }
+
+  await AdminSession.deleteOne({ tokenHash: hashSessionToken(token) });
+}
+
+async function createSessionForUser(user) {
+  const token = await createSessionToken();
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+
+  await AdminSession.create({
+    userId: user._id,
+    tokenHash: hashSessionToken(token),
+    expiresAt,
+    lastSeenAt: new Date(),
+  });
+
+  return token;
+}
+
+async function getAuthenticatedUser(req) {
+  const cookies = parseCookies(req);
+  const sessionToken = cookies[ADMIN_SESSION_COOKIE];
+
+  if (!sessionToken) {
+    return null;
+  }
+
+  const session = await AdminSession.findOne({ tokenHash: hashSessionToken(sessionToken) }).lean();
+
+  if (!session) {
+    return null;
+  }
+
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    await AdminSession.deleteOne({ _id: session._id });
+    return null;
+  }
+
+  const user = await User.findById(session.userId).lean();
+
+  if (!user) {
+    await AdminSession.deleteOne({ _id: session._id });
+    return null;
+  }
+
+  return {
+    sessionId: String(session._id),
+    sessionToken,
+    user: sanitizeUser(user),
+  };
+}
+
+function normalizeReturnTo(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+
+  if (!normalized || !normalized.startsWith('/') || normalized.startsWith('//') || normalized.startsWith('/login')) {
+    return '/';
+  }
+
+  return normalized;
+}
+
+function sendRedirect(res, location, method, statusCode = 302) {
+  res.writeHead(statusCode, {
+    Location: location,
+    'Cache-Control': 'no-store',
+  });
+
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
+
+  res.end();
+}
+
+function buildLoginRedirect(reqUrl) {
+  const returnTo = normalizeReturnTo(`${reqUrl.pathname}${reqUrl.search}`);
+  return `/login?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+async function requireAuthenticatedRequest(req, res, method) {
+  const auth = await getAuthenticatedUser(req);
+
+  if (!auth) {
+    sendJson(res, 401, { error: 'Sua sessão expirou. Faça login novamente.' }, method);
+    return null;
+  }
+
+  return auth;
+}
+
+async function requireAuthenticatedPage(req, res, reqUrl, method) {
+  const auth = await getAuthenticatedUser(req);
+
+  if (!auth) {
+    sendRedirect(res, buildLoginRedirect(reqUrl), method);
+    return null;
+  }
+
+  return auth;
+}
+
+async function handleSessionRequest(req, res, method) {
+  const auth = await getAuthenticatedUser(req);
+
+  if (!auth) {
+    sendJson(res, 401, { error: 'Sua sessão expirou. Faça login novamente.' }, method);
+    return;
+  }
+
+  sendJson(res, 200, { authenticated: true, user: auth.user }, method);
+}
+
+async function handleLogin(req, res, reqUrl) {
+  let body;
+
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível ler o corpo da requisição.' }, req.method);
+    return;
+  }
+
+  try {
+    const identifier = normalizeIdentifier(body.identifier);
+    const password = normalizePassword(body.password);
+    const user = await User.findOne({
+      $or: [
+        { emailNormalized: identifier },
+        { loginNormalized: identifier },
+      ],
+    });
+
+    if (!user) {
+      sendJson(res, 401, { error: 'Login ou senha inválidos.' }, req.method);
+      return;
+    }
+
+    const passwordMatches = await verifyPassword(password, user.passwordHash);
+
+    if (!passwordMatches) {
+      sendJson(res, 401, { error: 'Login ou senha inválidos.' }, req.method);
+      return;
+    }
+
+    await AdminSession.deleteMany({ userId: user._id, expiresAt: { $lte: new Date() } });
+    const sessionToken = await createSessionForUser(user);
+    setSessionCookie(req, res, sessionToken);
+
+    sendJson(res, 200, {
+      user: sanitizeUser(user),
+      redirectTo: normalizeReturnTo(reqUrl.searchParams.get('returnTo') || '/'),
+    }, req.method);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message || 'Não foi possível fazer login.' }, req.method);
+  }
+}
+
+async function handleLogout(req, res) {
+  const cookies = parseCookies(req);
+
+  await destroySessionByToken(cookies[ADMIN_SESSION_COOKIE]);
+  clearSessionCookie(req, res);
+  sendJson(res, 200, { success: true }, req.method);
+}
+
+async function ensureInitialAdmin() {
+  const usersCount = await User.countDocuments();
+
+  if (usersCount > 0) {
+    return;
+  }
+
+  const config = getInitialAdminConfig(process.env);
+  await upsertAdminUser(User, config);
+
+  const usingDefaultPassword = !process.env.ADMIN_PASSWORD;
+  console.warn('[auth] Usuário admin inicial criado.');
+  console.warn(`[auth] Login: ${config.login} | E-mail: ${config.email}`);
+
+  if (usingDefaultPassword) {
+    console.warn('[auth] A senha padrão está ativa. Defina ADMIN_PASSWORD ou rode npm run admin:create.');
+  } else {
+    console.warn('[auth] A senha inicial foi carregada das variáveis de ambiente.');
+  }
+}
+
 function buildProductResponse(req, product) {
   const finalPath = `/produto/${product.slug}`;
   const finalUrl = toAbsoluteUrl(req, finalPath);
@@ -384,6 +706,25 @@ function buildProductResponse(req, product) {
   };
 }
 
+function buildPublicProductResponse(product) {
+  const artTemplate = getArtTemplateById(product.artTemplateId);
+
+  return {
+    slug: product.slug,
+    title: product.title,
+    rewardMessage: product.rewardMessage || 'Você ganhou este produto.',
+    productImagePath: product.productImagePath,
+    artTemplate: artTemplate
+      ? {
+          id: artTemplate.id,
+          name: artTemplate.name,
+          imageUrl: `/api/public/art-templates/${encodeURIComponent(artTemplate.id)}/image`,
+          qrSlot: artTemplate.qrSlot,
+        }
+      : null,
+  };
+}
+
 async function listProducts(req, res, method) {
   const products = await readProducts();
   const ordered = products.map((product) => buildProductResponse(req, product));
@@ -412,6 +753,18 @@ async function getProductBySlug(req, res, method, slug) {
   }
 
   sendJson(res, 200, buildProductResponse(req, product), method);
+}
+
+async function getPublicProductBySlug(res, method, slug) {
+  const productRecord = await Product.findOne({ slug }).lean();
+  const product = productRecord ? normalizeProductRecord(productRecord) : null;
+
+  if (!product) {
+    sendJson(res, 404, { error: 'Produto não encontrado.' }, method);
+    return;
+  }
+
+  sendJson(res, 200, buildPublicProductResponse(product), method);
 }
 
 async function createProduct(req, res) {
@@ -780,41 +1133,42 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (reqUrl.pathname === '/api/qrcode' && ['GET', 'HEAD'].includes(method)) {
-    await handleQrRequest(reqUrl, res, method);
+  if ((reqUrl.pathname === '/login' || reqUrl.pathname === '/login.html') && ['GET', 'HEAD'].includes(method)) {
+    const auth = await getAuthenticatedUser(req);
+
+    if (auth) {
+      sendRedirect(res, normalizeReturnTo(reqUrl.searchParams.get('returnTo') || '/'), method);
+      return;
+    }
+
+    await serveStaticFile('/login.html', res, method);
     return;
   }
 
-  if (reqUrl.pathname === '/api/art-templates' && ['GET', 'HEAD'].includes(method)) {
-    await listArtTemplates(res, method);
+  if (reqUrl.pathname === '/api/auth/login' && method === 'POST') {
+    await handleLogin(req, res, reqUrl);
     return;
   }
 
-  if (reqUrl.pathname.startsWith('/api/art-templates/') && reqUrl.pathname.endsWith('/image') && ['GET', 'HEAD'].includes(method)) {
-    const templateId = decodeURIComponent(reqUrl.pathname.replace('/api/art-templates/', '').replace('/image', '').replace(/\/$/, ''));
+  if (reqUrl.pathname === '/api/auth/logout' && method === 'POST') {
+    await handleLogout(req, res);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/auth/session' && ['GET', 'HEAD'].includes(method)) {
+    await handleSessionRequest(req, res, method);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/public/products/') && ['GET', 'HEAD'].includes(method)) {
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/public/products/', '').trim());
+    await getPublicProductBySlug(res, method, slug);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/public/art-templates/') && reqUrl.pathname.endsWith('/image') && ['GET', 'HEAD'].includes(method)) {
+    const templateId = decodeURIComponent(reqUrl.pathname.replace('/api/public/art-templates/', '').replace('/image', '').replace(/\/$/, ''));
     await handleArtTemplateImageRequest(res, method, templateId);
-    return;
-  }
-
-  if (reqUrl.pathname === '/api/products' && ['GET', 'HEAD'].includes(method)) {
-    await listProducts(req, res, method);
-    return;
-  }
-
-  if (reqUrl.pathname === '/api/products' && method === 'POST') {
-    await createProduct(req, res);
-    return;
-  }
-
-  if (reqUrl.pathname.startsWith('/api/products/') && ['GET', 'HEAD'].includes(method)) {
-    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/products/', '').trim());
-    await getProductBySlug(req, res, method, slug);
-    return;
-  }
-
-  if (reqUrl.pathname.startsWith('/api/products/') && method === 'PUT') {
-    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/products/', '').trim());
-    await updateProduct(req, res, slug);
     return;
   }
 
@@ -823,18 +1177,142 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (reqUrl.pathname === '/api/qrcode' && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await handleQrRequest(reqUrl, res, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/art-templates' && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await listArtTemplates(res, method);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/art-templates/') && reqUrl.pathname.endsWith('/image') && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    const templateId = decodeURIComponent(reqUrl.pathname.replace('/api/art-templates/', '').replace('/image', '').replace(/\/$/, ''));
+    await handleArtTemplateImageRequest(res, method, templateId);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/products' && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await listProducts(req, res, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/products' && method === 'POST') {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await createProduct(req, res);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/products/') && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/products/', '').trim());
+    await getProductBySlug(req, res, method, slug);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith('/api/products/') && method === 'PUT') {
+    const auth = await requireAuthenticatedRequest(req, res, method);
+
+    if (!auth) {
+      return;
+    }
+
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/api/products/', '').trim());
+    await updateProduct(req, res, slug);
+    return;
+  }
+
   if (reqUrl.pathname.startsWith('/arte/')) {
+    const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
+
+    if (!auth) {
+      return;
+    }
+
     await serveStaticFile('/art.html', res, method);
     return;
   }
 
-  if (reqUrl.pathname === '/produtos') {
+  if (['/', '/index.html'].includes(reqUrl.pathname)) {
+    const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await serveStaticFile('/index.html', res, method);
+    return;
+  }
+
+  if (['/produtos', '/products.html'].includes(reqUrl.pathname)) {
+    const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
+
+    if (!auth) {
+      return;
+    }
+
     await serveStaticFile('/products.html', res, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/art.html' && ['GET', 'HEAD'].includes(method)) {
+    const auth = await requireAuthenticatedPage(req, res, reqUrl, method);
+
+    if (!auth) {
+      return;
+    }
+
+    await serveStaticFile('/art.html', res, method);
+    return;
+  }
+
+  if (reqUrl.pathname === '/product.html' && ['GET', 'HEAD'].includes(method)) {
+    sendJson(res, 404, { error: 'Página não encontrada.' }, method);
     return;
   }
 
   if (!['GET', 'HEAD'].includes(method)) {
     sendJson(res, 405, { error: 'Método não permitido.' }, method);
+    return;
+  }
+
+  if (reqUrl.pathname.endsWith('.html') && !PUBLIC_STATIC_PATHS.has(reqUrl.pathname)) {
+    sendJson(res, 404, { error: 'Página não encontrada.' }, method);
     return;
   }
 

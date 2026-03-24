@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Painel QR</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="hero-card auth-hero-card">
+        <div class="hero-copy">
+          <span class="eyebrow">Acesso restrito</span>
+          <h1>Faça login para abrir o painel.</h1>
+          <p>
+            O cadastro, a listagem de produtos e a geração da arte com QR agora exigem autenticação.
+            Apenas a página pública do produto continua aberta sem login.
+          </p>
+        </div>
+        <div class="hero-steps">
+          <span>Login seguro</span>
+          <span>Sessão em cookie httpOnly</span>
+          <span>Rotas privadas</span>
+        </div>
+      </section>
+
+      <section class="panel auth-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Entrar</span>
+            <h2>Autenticação</h2>
+          </div>
+          <span id="login-badge" class="status-badge">Aguardando</span>
+        </div>
+
+        <form id="login-form" class="auth-form">
+          <label class="field">
+            <span>E-mail ou login</span>
+            <input
+              id="identifier-input"
+              name="identifier"
+              type="text"
+              autocomplete="username"
+              placeholder="admin ou admin@empresa.com"
+              required
+            />
+          </label>
+
+          <label class="field">
+            <span>Senha</span>
+            <input
+              id="password-input"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Sua senha"
+              required
+            />
+          </label>
+
+          <div class="form-actions auth-form-actions">
+            <button id="login-submit-button" class="primary-button" type="submit">Entrar</button>
+            <p id="login-status" class="helper-text">
+              Use o usuário admin configurado no backend para acessar o painel.
+            </p>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script src="/login.js" defer></script>
+  </body>
+</html>

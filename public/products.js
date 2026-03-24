@@ -3,6 +3,7 @@ const productSearchInput = document.querySelector('#product-search-input');
 const listCount = document.querySelector('#list-count');
 const emptyList = document.querySelector('#empty-list');
 const listStatus = document.querySelector('#list-status');
+const apiFetch = window.adminSession?.fetch?.bind(window.adminSession) || window.fetch.bind(window);
 
 let products = [];
 
@@ -109,7 +110,7 @@ async function loadProducts() {
   setListStatus('Carregando produtos salvos...');
 
   try {
-    const response = await fetch('/api/products');
+    const response = await apiFetch('/api/products');
     const payload = await response.json();
 
     if (!response.ok) {

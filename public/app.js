@@ -17,6 +17,7 @@ const productPreviewMessage = document.querySelector('#product-preview-message')
 const productPreviewTemplate = document.querySelector('#product-preview-template');
 const productPreviewQrColor = document.querySelector('#product-preview-qr-color');
 const productPreviewQrColorSwatch = document.querySelector('#product-preview-qr-color-swatch');
+const apiFetch = window.adminSession?.fetch?.bind(window.adminSession) || window.fetch.bind(window);
 
 let currentProductImageDataUrl = '';
 let currentProductPreviewSrc = '';
@@ -144,7 +145,7 @@ function startEditProduct(item) {
 }
 
 async function loadArtTemplates() {
-  const response = await fetch('/api/art-templates');
+  const response = await apiFetch('/api/art-templates');
   const payload = await response.json();
 
   if (!response.ok) {
@@ -160,7 +161,7 @@ async function loadArtTemplates() {
 
 async function loadProductForEdit(slug) {
   try {
-    const response = await fetch(`/api/products/${encodeURIComponent(slug)}`);
+    const response = await apiFetch(`/api/products/${encodeURIComponent(slug)}`);
     const payload = await response.json();
 
     if (!response.ok) {
@@ -213,7 +214,7 @@ form.addEventListener('submit', async (event) => {
       payload.productImage = await optimizeImage(productImageInput.files[0]);
     }
 
-    const response = await fetch(editingSlug ? `/api/products/${encodeURIComponent(editingSlug)}` : '/api/products', {
+    const response = await apiFetch(editingSlug ? `/api/products/${encodeURIComponent(editingSlug)}` : '/api/products', {
       method: editingSlug ? 'PUT' : 'POST',
       headers: {
         'Content-Type': 'application/json',

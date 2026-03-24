@@ -8,6 +8,14 @@
   </head>
   <body class="art-page">
     <main class="art-shell">
+      <header class="admin-topbar">
+        <a class="admin-brand" href="/">Painel QR</a>
+        <div class="admin-session-panel">
+          <span class="status-badge" data-admin-user>Carregando sessão...</span>
+          <button class="ghost-button" type="button" data-logout-button>Sair</button>
+        </div>
+      </header>
+
       <section id="art-loading" class="state-card">Gerando arte...</section>
 
       <section id="art-error" class="state-card" hidden>
@@ -47,6 +55,7 @@
       </section>
     </main>
 
+    <script src="/admin-auth.js" defer></script>
     <script src="/artwork.js" defer></script>
     <script src="/art.js" defer></script>
   </body>

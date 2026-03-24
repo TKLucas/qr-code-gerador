@@ -28,7 +28,7 @@ async function loadProduct() {
   }
 
   try {
-    const response = await fetch(`/api/products/${encodeURIComponent(slug)}`);
+    const response = await fetch(`/api/public/products/${encodeURIComponent(slug)}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -37,6 +37,7 @@ async function loadProduct() {
 
     document.title = `${data.title} | Produto`;
     productPageImage.src = data.productImagePath;
+    productPageImage.alt = data.title ? `Foto do produto ${data.title}` : 'Foto do produto';
     productPageTitle.textContent = data.title;
     productPageMessage.textContent = data.rewardMessage || 'Você ganhou este produto.';
     productPageSubtitle.textContent = 'Você ganhou um prêmio exclusivo.';

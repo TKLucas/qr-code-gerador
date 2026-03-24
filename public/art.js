@@ -9,6 +9,7 @@ const downloadArtButton = document.querySelector('#download-art-button');
 const downloadTransparentQrButton = document.querySelector('#download-transparent-qr-button');
 const copyFinalLinkButton = document.querySelector('#copy-final-link-button');
 const openFinalLinkButton = document.querySelector('#open-final-link-button');
+const apiFetch = window.adminSession?.fetch?.bind(window.adminSession) || window.fetch.bind(window);
 
 let currentProduct = null;
 
@@ -34,7 +35,7 @@ async function loadArtPage() {
   }
 
   try {
-    const response = await fetch(`/api/products/${encodeURIComponent(slug)}`);
+    const response = await apiFetch(`/api/products/${encodeURIComponent(slug)}`);
     const data = await response.json();
 
     if (!response.ok) {

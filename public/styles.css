@@ -545,7 +545,7 @@ button:disabled,
   z-index: 1;
   width: min(860px, 100%);
   max-height: min(90vh, 900px);
-  overflow: auto;
+  overflow: hidden;
   background: rgba(255, 251, 247, 0.98);
   border: 1px solid rgba(91, 24, 33, 0.08);
   border-radius: 32px;
@@ -555,7 +555,9 @@ button:disabled,
 
 .raffle-selection-modal-card {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 16px;
+  min-height: 0;
 }
 
 .raffle-selection-heading {
@@ -571,8 +573,9 @@ button:disabled,
 .raffle-selection-list {
   display: grid;
   gap: 12px;
-  max-height: 420px;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
 }
 

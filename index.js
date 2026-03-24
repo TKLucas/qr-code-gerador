@@ -1109,12 +1109,16 @@ async function getPublicRaffleBySlug(req, res, method, slug) {
   }, method);
 }
 
-async function drawRaffleProduct(req, res, slug) {
+async function claimRaffleProductBySlug(slug) {
   const raffleRecord = await RaffleCampaign.findOne({ slug }).lean();
 
   if (!raffleRecord) {
-    sendJson(res, 404, { error: 'Sorteio não encontrado.' }, req.method);
-    return;
+    return {
+      status: 404,
+      exhausted: false,
+      error: 'Sorteio não encontrado.',
+      product: null,
+    };
   }
 
   const raffleId = raffleRecord._id;
@@ -1125,11 +1129,12 @@ async function drawRaffleProduct(req, res, slug) {
     const drawnCount = drawnProductIds.length;
 
     if (drawnCount >= raffleRecord.totalProducts) {
-      sendJson(res, 409, {
+      return {
+        status: 409,
         error: 'Todos os produtos deste sorteio já foram distribuídos.',
         exhausted: true,
-      }, req.method);
-      return;
+        product: null,
+      };
     }
 
     const availableProducts = await Product.aggregate([
@@ -1160,11 +1165,12 @@ async function drawRaffleProduct(req, res, slug) {
     const selectedProduct = availableProducts[0];
 
     if (!selectedProduct) {
-      sendJson(res, 409, {
+      return {
+        status: 409,
         error: 'Todos os produtos deste sorteio já foram distribuídos.',
         exhausted: true,
-      }, req.method);
-      return;
+        product: null,
+      };
     }
 
     try {
@@ -1173,7 +1179,8 @@ async function drawRaffleProduct(req, res, slug) {
         productId: selectedProduct._id,
       });
 
-      sendJson(res, 200, {
+      return {
+        status: 200,
         exhausted: false,
         product: {
           slug: selectedProduct.slug,
@@ -1182,8 +1189,8 @@ async function drawRaffleProduct(req, res, slug) {
           productImagePath: selectedProduct.productImagePath || '',
           path: `/produto/${selectedProduct.slug}`,
         },
-      }, req.method);
-      return;
+        error: '',
+      };
     } catch (error) {
       if (error?.code === 11000) {
         continue;
@@ -1193,10 +1200,72 @@ async function drawRaffleProduct(req, res, slug) {
     }
   }
 
-  sendJson(res, 409, {
+  return {
+    status: 409,
     error: 'Não foi possível concluir o sorteio agora. Tente novamente.',
     exhausted: false,
+    product: null,
+  };
+}
+
+async function drawRaffleProduct(req, res, slug) {
+  const result = await claimRaffleProductBySlug(slug);
+  sendJson(res, result.status, {
+    exhausted: result.exhausted,
+    error: result.error,
+    product: result.product,
   }, req.method);
+}
+
+function sendPublicRaffleError(res, method, title, message, statusCode = 409) {
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif; background: #fff9f3; color: #331018; }
+      main { width: min(520px, calc(100% - 24px)); padding: 24px; border-radius: 28px; background: rgba(255, 251, 247, 0.96); border: 1px solid rgba(91, 24, 33, 0.08); box-shadow: 0 28px 70px rgba(88, 15, 28, 0.14); }
+      h1 { margin: 0 0 12px; font-size: 2rem; }
+      p { margin: 0; line-height: 1.5; color: #7d4953; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      <p>${message}</p>
+    </main>
+  </body>
+</html>`;
+
+  res.writeHead(statusCode, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
+
+  res.end(html);
+}
+
+async function redirectPublicRaffleToProduct(req, res, method, slug) {
+  const result = await claimRaffleProductBySlug(slug);
+
+  if (result.status === 200 && result.product?.path) {
+    sendRedirect(res, result.product.path, method, 302);
+    return;
+  }
+
+  if (result.exhausted) {
+    sendPublicRaffleError(res, method, 'Sorteio encerrado', result.error || 'Todos os produtos desta campanha já foram distribuídos.', 409);
+    return;
+  }
+
+  sendPublicRaffleError(res, method, 'Sorteio indisponível', result.error || 'Não foi possível concluir o sorteio.', result.status || 500);
 }
 
 async function listProducts(req, res, method) {
@@ -1795,8 +1864,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (reqUrl.pathname.startsWith('/sorteio/')) {
-    await serveStaticFile('/raffle.html', res, method);
+  if (reqUrl.pathname.startsWith('/sorteio/') && ['GET', 'HEAD'].includes(method)) {
+    const slug = decodeURIComponent(reqUrl.pathname.replace('/sorteio/', '').replace(/\/$/, ''));
+    await redirectPublicRaffleToProduct(req, res, method, slug);
     return;
   }
 

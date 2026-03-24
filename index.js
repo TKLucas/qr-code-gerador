@@ -65,8 +65,10 @@ await connectDatabase();
 const Product = createProductModel();
 const User = createUserModel();
 const AdminSession = createSessionModel();
+const UploadAsset = createUploadAssetModel();
 await migrateLegacyProducts();
 await ensureInitialAdmin();
+await syncExistingUploadsToDatabase();
 
 function normalizeQrText(input = '') {
   const trimmed = input.trim();
@@ -251,6 +253,35 @@ async function ensureStorage() {
   await mkdir(UPLOADS_DIR, { recursive: true });
 }
 
+async function syncExistingUploadsToDatabase() {
+  const filenames = await readdir(UPLOADS_DIR).catch(() => []);
+
+  for (const filename of filenames) {
+    const publicPath = `/uploads/${filename}`;
+    const existingAsset = await UploadAsset.exists({ path: publicPath });
+
+    if (existingAsset) {
+      continue;
+    }
+
+    const absolutePath = path.join(UPLOADS_DIR, filename);
+    const extension = path.extname(filename).toLowerCase();
+    const contentType = MIME_TYPES[extension] || 'application/octet-stream';
+    const buffer = await readFile(absolutePath).catch(() => null);
+
+    if (!buffer) {
+      continue;
+    }
+
+    await UploadAsset.create({
+      path: publicPath,
+      contentType,
+      data: buffer,
+      size: buffer.length,
+    });
+  }
+}
+
 async function findArtTemplates() {
   const entries = await readdir(process.cwd(), { withFileTypes: true });
   const files = entries
@@ -325,10 +356,25 @@ async function saveImageFromDataUrl(dataUrl, label, slug, suffix) {
   const extension = IMAGE_EXTENSIONS[parsed.mimeType];
   const filename = `${slug}-${suffix}-${crypto.randomUUID().slice(0, 8)}.${extension}`;
   const absolutePath = path.join(UPLOADS_DIR, filename);
+  const publicPath = `/uploads/${filename}`;
 
   await writeFile(absolutePath, parsed.buffer);
+  await UploadAsset.findOneAndUpdate(
+    { path: publicPath },
+    {
+      path: publicPath,
+      contentType: parsed.mimeType,
+      data: parsed.buffer,
+      size: parsed.buffer.length,
+    },
+    {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true,
+    }
+  );
 
-  return `/uploads/${filename}`;
+  return publicPath;
 }
 
 async function readJsonBody(req) {
@@ -916,6 +962,38 @@ function createProductModel() {
   return mongoose.models.Product || mongoose.model('Product', productSchema);
 }
 
+function createUploadAssetModel() {
+  const uploadAssetSchema = new mongoose.Schema(
+    {
+      path: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true,
+      },
+      contentType: {
+        type: String,
+        required: true,
+      },
+      data: {
+        type: Buffer,
+        required: true,
+      },
+      size: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+    },
+    {
+      timestamps: true,
+      versionKey: false,
+    }
+  );
+
+  return mongoose.models.UploadAsset || mongoose.model('UploadAsset', uploadAssetSchema);
+}
+
 async function generateUniqueSlug(title) {
   const baseSlug = createSlug(title);
   let slug = baseSlug;
@@ -1105,6 +1183,21 @@ async function handleArtTemplateImageRequest(res, method, templateId) {
   }
 }
 
+async function serveUploadAssetFromDatabase(reqPath, res, method) {
+  const asset = await UploadAsset.findOne({ path: reqPath }).lean();
+
+  if (!asset?.data) {
+    sendJson(res, 404, { error: 'Arquivo não encontrado.' }, method);
+    return;
+  }
+
+  sendBuffer(res, 200, Buffer.from(asset.data), {
+    'Content-Type': asset.contentType || 'application/octet-stream',
+    'Cache-Control': 'public, max-age=3600',
+    'Content-Length': String(asset.size || Buffer.byteLength(asset.data)),
+  }, method);
+}
+
 async function serveStaticFile(reqPath, res, method) {
   const cleanPath = reqPath === '/' ? '/index.html' : reqPath;
   const normalizedPath = path.normalize(cleanPath).replace(/^(\.\.(\/|\\|$))+/, '');
@@ -1125,6 +1218,11 @@ async function serveStaticFile(reqPath, res, method) {
         : 'no-store',
     }, method);
   } catch {
+    if (reqPath.startsWith('/uploads/')) {
+      await serveUploadAssetFromDatabase(reqPath, res, method);
+      return;
+    }
+
     sendJson(res, 404, { error: 'Arquivo não encontrado.' }, method);
   }
 }
